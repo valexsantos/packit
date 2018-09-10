@@ -1,0 +1,8 @@
+LXC/LXD Slackware package
+
+LXD is a container "hypervisor" and a new user experience for LXC.
+
+Homepage: https://linuxcontainers.org
+
+This package includes scripts to run the lxd service under DJB daemontools.
+

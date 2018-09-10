@@ -1,0 +1,11 @@
+PRGNAM="daemontools-encore"
+VERSION="1.10"
+HOMEPAGE="http://untroubled.org/daemontools-encore"
+DOWNLOAD="http://untroubled.org/daemontools-encore/daemontools-encore-1.10.tar.gz"
+MD5SUM="a9b22e9eff5c690cd1c37e780d30cd78"
+DOWNLOAD_x86_64=""
+MD5SUM_x86_64=""
+REQUIRES=""
+MAINTAINER="Vasco Santos"
+EMAIL="valexsantos_gmail_com"
+

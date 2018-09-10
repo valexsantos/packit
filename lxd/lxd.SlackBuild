@@ -1,0 +1,110 @@
+#!/bin/sh
+
+# Slackware build script for lxd
+
+# Copyright 2017-2018 Vasco Santos <valexsantos[at]gmail[dot]com>
+# All rights reserved.
+#
+# Redistribution and use of this script, with or without modification, is
+# permitted provided that the following conditions are met:
+#
+# 1. Redistributions of this script must retain the above copyright
+#    notice, this list of conditions and the following disclaimer.
+#
+# THIS SOFTWARE IS PROVIDED BY THE AUTHOR ''AS IS'' AND ANY EXPRESS OR IMPLIED
+# WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+# MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
+# EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+# SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+# PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+# OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+# WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+# OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+# ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+PRGNAM=lxd
+VERSION=${VERSION:-3.0.1}
+BUILD=${BUILD:-1}
+TAG=${TAG:-_SBo}
+
+if [ -z "$ARCH" ]; then
+  case "$( uname -m )" in
+    i?86) ARCH=i486 ;;
+    arm*) ARCH=arm ;;
+       *) ARCH=$( uname -m ) ;;
+  esac
+fi
+
+CWD=$(pwd)
+TMP=${TMP:-/tmp/SBo}
+PKG=$TMP/package-$PRGNAM
+OUTPUT=${OUTPUT:-/tmp}
+PREFIX=/opt/lxd
+
+if [ "$ARCH" = "i486" ]; then
+   SLKCFLAGS="-O2 -march=i486 -mtune=i686"
+   LIBDIRSUFFIX=""
+elif [ "$ARCH" = "i686" ]; then
+   SLKCFLAGS="-O2 -march=i686 -mtune=i686"
+   LIBDIRSUFFIX=""
+elif [ "$ARCH" = "x86_64" ]; then
+   SLKCFLAGS="-O2 -fPIC"
+   LIBDIRSUFFIX="64"
+else
+   SLKCFLAGS=""
+   LIBDIRSUFFIX=""
+fi
+
+set -e
+
+rm -rf $PKG
+mkdir -p $TMP $PKG $OUTPUT
+cd $TMP
+rm -rf $PRGNAM-$VERSION
+tar xvf $CWD/$PRGNAM-$VERSION.tar.gz
+cd $PRGNAM-$VERSION
+chown -R root:root .
+
+#mkdir -p $PRGNAM-$VERSION/go
+export GOPATH=$TMP/$PRGNAM-$VERSION/dist
+mkdir -p $PKG/$PREFIX/{bin,man/man1}
+
+cd $TMP/$PRGNAM-$VERSION/ 
+go build -o $PKG$PREFIX/bin/lxd github.com/lxc/lxd/lxd
+go build -o $PKG$PREFIX/bin/lxc github.com/lxc/lxd/lxc
+go build -o $PKG$PREFIX/bin/fuidshift github.com/lxc/lxd/fuidshift
+go build -o $PKG$PREFIX/bin/lxd-p2c github.com/lxc/lxd/lxd-p2c
+
+cp scripts/lxc-to-lxd $PKG$PREFIX/bin
+# generate man-pages
+help2man $PKG$PREFIX/bin/lxd -n "The container hypervisor - daemon" --no-info --no-discard-stderr > $PKG$PREFIX/man/man1/lxd.1
+help2man $PKG$PREFIX/bin/lxc -n "The container hypervisor - client" --no-info --no-discard-stderr > $PKG$PREFIX/man/man1/lxc.1
+help2man $PKG$PREFIX/bin/fuidshift -n "uid/gid shifter" --no-info --no-discard-stderr > $PKG$PREFIX/man/man1/fuidshift.1
+help2man $PKG$PREFIX/bin/lxd-p2c -n "uid/gid shifter" --no-info --no-discard-stderr > $PKG$PREFIX/man/man1/lxd-p2c.1
+#help2man $PKG$PREFIX/bin/lxc-to-lxd -n "Convert LXC containers to LXD" --no-info --version-string=%{version} --no-discard-stderr > $PKG$PREFIX/man/man1/lxc-to-lxd.1
+
+#go get github.com/lxc/lxd
+#cd $GOPATH/src/github.com/lxc/lxd
+#make
+
+#chown -R root:root $TMP/$PRGNAM-$VERSION
+
+#cp -a $TMP/$PRGNAM-$VERSION/go/bin/* $PKG$PREFIX/bin
+
+mkdir -p $PKG$PREFIX/service/log
+mkdir -p $PKG/etc/profile.d
+
+mkdir -p $PKG/install
+cat $CWD/slack-desc > $PKG/install/slack-desc
+cat $CWD/doinst.sh > $PKG/install/doinst.sh
+cat $CWD/service-log-lxd-run > $PKG$PREFIX/service/log/run.new
+cat $CWD/service-lxd-run > $PKG$PREFIX/service/run.new
+cat $CWD/etc-profile-d-lxd.sh > $PKG/etc/profile.d/lxd.sh.new
+
+chmod 755 $PKG$PREFIX/service/log/run.new
+chmod 755 $PKG$PREFIX/service/run.new
+chmod 755 $PKG/etc/profile.d/lxd.sh.new
+
+cd $PKG
+/sbin/makepkg -l y -c n $OUTPUT/$PRGNAM-$VERSION-$ARCH-$BUILD$TAG.${PKGTYPE:-tgz}
+

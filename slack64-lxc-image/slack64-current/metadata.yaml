@@ -1,0 +1,71 @@
+{
+    "architecture": "x86_64",
+    "creation_date": 1526565081,
+    "properties": {
+        "architecture": "x86_64",
+        "description": "Slackware 14.2 x86_64 (current) (20170630_00:00)",
+        "name": "slacware-current-x86_64-current-20170630_00:00",
+        "os": "slackware",
+        "release": "14.2",
+        "variant": "current"
+    },
+    "templates": {
+        "/etc/inittab": {
+            "template": "inittab.tpl",
+            "when": [
+                "create",
+                "copy"
+            ]
+        },
+        "/etc/profile.d/alias.sh": {
+            "template": "alias.tpl",
+            "when": [
+                "create",
+                "copy"
+            ]
+        },
+        "/etc/skel/.bash_logout": {
+            "template": "dot_bash_logout.tpl",
+            "when": [
+                "create",
+                "copy"
+            ]
+        },
+        "/etc/skel/.bash_profile": {
+            "template": "dot_bash_profile.tpl",
+            "when": [
+                "create",
+                "copy"
+            ]
+        },
+        "/etc/skel/.bashrc": {
+            "template": "dot_bashrc.tpl",
+            "when": [
+                "create",
+                "copy"
+            ]
+        },
+        "/etc/bashrc": {
+            "template": "bashrc.tpl",
+            "when": [
+                "create",
+                "copy"
+            ]
+        },
+        "/etc/HOSTNAME": {
+            "template": "hostname.tpl",
+            "when": [
+                "create",
+                "copy"
+            ]
+        },
+        "/etc/hosts": {
+            "template": "hosts.tpl",
+            "when": [
+                "create",
+                "copy"
+            ]
+        }
+    }
+}
+

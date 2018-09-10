@@ -1,0 +1,233 @@
+#
+# daemontools helpers lib
+#
+# Copyright 2017-2018 Vasco Santos <valexsantos[at]gmail[dot]com>
+# All rights reserved.
+#
+# Redistribution and use of this script, with or without modification, is
+# permitted provided that the following conditions are met:
+#
+# 1. Redistributions of this script must retain the above copyright
+#    notice, this list of conditions and the following disclaimer.
+#
+# THIS SOFTWARE IS PROVIDED BY THE AUTHOR ''AS IS'' AND ANY EXPRESS OR IMPLIED
+# WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+# MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
+# EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+# SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+# PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+# OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+# WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+# OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+# ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+DT_BIN_DIR=@DT_BIN_DIR@
+
+#
+# return svc_fatal_error "supervise for '<service>' did not start!  Is svscan running?"
+#
+svc_fatal_error() {
+  echo "Fatal error: $@" >&2
+  return 1
+}
+
+#
+# usage: svc_isup <service>
+#
+svc_isup() {
+  SVSCANDIR=${SVSCANDIR-/service}
+  $DT_BIN_DIR/svok "$SVSCANDIR/$1"
+  $DT_BIN_DIR/svstat "$SVSCANDIR/$1" 2>/dev/null | fgrep ' up ' >/dev/null
+}
+
+#
+# usage: svc_isdown <service>
+#
+svc_isdown() {
+  SVSCANDIR=${SVSCANDIR-/service}
+  $DT_BIN_DIR/svstat "$SVSCANDIR/$1" 2>/dev/null | fgrep -v ' up ' >/dev/null
+}
+
+#
+# usage: svc_waitup <service>
+# wait timeout $SVCTIMEOUT (default 15s)
+#
+svc_waitup() {
+  if svc_isup "$1"; then return 0; fi
+  sleep 1
+  count=1
+  until svc_isup "$1"; do
+    echo -n .
+    sleep 1
+    count=$(($count+1))
+    if [ $count -gt ${SVCTIMEOUT-15} ]; then return 1; fi
+  done
+}
+#
+# usage: svc_waitdown <service>
+# wait timeout $SVCTIMEOUT (default 15s)
+#
+svc_waitdown() {
+  if svc_isdown "$1"; then return 0; fi
+  sleep 1
+  count=1
+  while svc_isup "$1"; do
+    echo -n .
+    sleep 1
+    count=$(($count+1))
+    if [ $count -gt ${SVCTIMEOUT-15} ]; then return 1; fi
+  done
+}
+
+#
+# usage: svc_start_proc <service>
+#        svc_start_proc <service>/log
+# wait timeout $SVCTIMEOUT (default 15s)
+#
+svc_start_proc() {
+  SVSCANDIR=${SVSCANDIR-/service}
+  # Check the "run" file
+  if [ ! -e "$SVSCANDIR/$1/run" ]; then
+    svc_fatal_error "'/service/$1/run' file does not exist!"
+    return $?
+  fi
+
+  rm -f "$SVSCANDIR/$1/down"
+
+  if ! $DT_BIN_DIR/svok "$SVSCANDIR/$1"; then
+    echo -n "(supervise"
+    count=1
+    until $DT_BIN_DIR/svok "$SVSCANDIR/$1"; do
+      echo -n .
+      sleep 1
+      count=$(($count+1))
+      if [ $count -gt ${SVCTIMEOUT-15} ]; then
+        echo -n ") "
+        svc_fatal_error "supervise for '/service/$1' did not start!  Is svscan running?"
+        return $?
+      fi
+    done
+    echo -n ") "
+  fi
+
+  $DT_BIN_DIR/svc -u "$SVSCANDIR/$1"
+  svc_waitup "$1"
+  echo -n "$SVSCANDIR/$1 "
+}
+
+#
+# start service including the log service
+# usage: svc_start <service>
+# wait timeout $SVCTIMEOUT (default 15s)
+#
+svc_start() {
+  SVSCANDIR=${SVSCANDIR-/service}
+  echo -n "Starting $1: "
+
+  # Control the log process first, so that all messages are logged ... 
+  if [ -d "$SVSCANDIR/$1/log" ]; then 
+    svc_start_proc "$1/log" 
+  fi 
+  # ... and then the main process.
+  svc_start_proc "$1"
+  echo "done."
+}
+
+#
+# usage: svc_stop_proc <service>
+#        svc_stop_proc <service>/log
+# wait timeout $SVCTIMEOUT (default 15s)
+#
+svc_stop_proc() {
+  SVSCANDIR=${SVSCANDIR-/service}
+  if ! [ -d "$SVSCANDIR/$1" -o -L "$SVSCANDIR/$1" ]; then
+    svc_fatal_error "Service '/service/$1' does not exist."
+    return $?
+  fi
+  touch "$SVSCANDIR/$1"/down
+  if svc_isup "$1"; then
+    $DT_BIN_DIR/svc -d "$SVSCANDIR/$1"
+    if svc_waitdown "$1"; then
+      echo -n "$SVSCANDIR/$1 "
+    else
+      svc_fatal_error "Failed to stop '/service/$1'."
+      return $?
+    fi
+  else
+    echo -n "$SVSCANDIR/$1 (already down) "
+  fi
+}
+
+#
+# stop service including the log service
+# usage: svc_stop <service>
+# wait timeout $SVCTIMEOUT (default 15s)
+#
+svc_stop() {
+  SVSCANDIR=${SVSCANDIR-/service}
+  echo -n "Stopping $1: "
+  svc_stop_proc "$1"
+  if [ -d "$SVSCANDIR/$1/log" ]; then
+    svc_stop_proc "$1/log"
+  fi
+  echo "done."
+}
+
+#
+# restart service including the log service
+# usage: svc_restart <service>
+# wait timeout $SVCTIMEOUT (default 15s)
+#
+svc_restart() {
+  svc_stop "$1"
+  svc_start "$1"
+  return $?
+}
+
+#
+# usage: svc_status <service>
+#
+svc_status() {
+  SVSCANDIR=${SVSCANDIR-/service}
+  if $DT_BIN_DIR/svok "$SVSCANDIR/$1"; then
+    $DT_BIN_DIR/svstat "$SVSCANDIR/$1"
+    if [ -d "$SVSCANDIR/$1/log" ]; then
+      $DT_BIN_DIR/svstat "$SVSCANDIR/$1"/log
+    fi
+  else
+    echo "Supervise not running on /service/$1"
+  fi
+  x=$?
+  return $x
+}
+
+#
+# usage: svc_remove <service>
+# service dir $SVSCANDIR (default /service)
+#
+svc_remove() {
+  SVSCANDIR=${SVSCANDIR-/service}
+  if ! [ -L "$SVSCANDIR/$1" ]; then
+    svc_fatal_error "Service '$1' is not symlinked into $SVSCANDIR and can't be removed."
+    return $?
+  fi
+  svc_stop "$1"
+
+  # Remove the symlink without loosing track of where it points to
+  cd "$SVSCANDIR/$1"
+  rm -f "$SVSCANDIR/$1"
+
+  # Stop the supervise tasks
+  if [ -d "log" ]; then
+    $DT_BIN_DIR/svc -dx log
+    sleep 2
+    rm -f log/down log/supervise/{control,lock,ok,status}
+    rmdir log/supervise
+  fi
+  $DT_BIN_DIR/svc -dx .
+  sleep 1
+  rm -f down supervise/{control,lock,ok,status}
+  rmdir supervise
+}
+
+

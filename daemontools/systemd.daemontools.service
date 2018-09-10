@@ -1,0 +1,12 @@
+[Unit]
+Description=DJB daemontools
+# After=sysinit.target
+After=systemd-remount-fs.service
+
+[Service]
+ExecStart=_PREFIX_/svscanboot
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+
