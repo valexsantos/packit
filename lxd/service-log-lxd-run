@@ -41,4 +41,3 @@ chown -R $LOGUSER $LOGDIR
 # go
 exec 2>&1
 exec setuidgid $LOGUSER multilog t s$LOG_FILE_SIZE n$LOG_FILE_HISTORY $LOGDIR
-

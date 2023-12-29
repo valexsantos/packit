@@ -22,8 +22,8 @@ preserve_perms() {
   config $NEW
 }
 
-# preserve_perms etc/rc.d/rc.lxd.new
-config etc/profile.d/lxd.sh.new
+preserve_perms etc/profile.d/lxd.sh.new
+preserve_perms etc/profile.d/lxd.csh.new
+
 config opt/lxd/service/run.new
 config opt/lxd/service/log/run.new
-

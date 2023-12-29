@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 # Slackware build script for lxd
 
@@ -22,20 +22,30 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+cd $(dirname $0) ; CWD=$(pwd)
+
 PRGNAM=lxd
-VERSION=${VERSION:-3.0.1}
+VERSION=${VERSION:-4.22}
 BUILD=${BUILD:-1}
 TAG=${TAG:-_SBo}
+PKGTYPE=${PKGTYPE:-tgz}
 
 if [ -z "$ARCH" ]; then
   case "$( uname -m )" in
-    i?86) ARCH=i486 ;;
+    i?86) ARCH=i586 ;;
     arm*) ARCH=arm ;;
        *) ARCH=$( uname -m ) ;;
   esac
 fi
 
-CWD=$(pwd)
+# If the variable PRINT_PACKAGE_NAME is set, then this script will report what
+# the name of the created package would be, and then exit. This information
+# could be useful to other scripts.
+if [ ! -z "${PRINT_PACKAGE_NAME}" ]; then
+  echo "$PRGNAM-$VERSION-$ARCH-$BUILD$TAG.$PKGTYPE"
+  exit 0
+fi
+
 TMP=${TMP:-/tmp/SBo}
 PKG=$TMP/package-$PRGNAM
 OUTPUT=${OUTPUT:-/tmp}
@@ -65,46 +75,58 @@ tar xvf $CWD/$PRGNAM-$VERSION.tar.gz
 cd $PRGNAM-$VERSION
 chown -R root:root .
 
-#mkdir -p $PRGNAM-$VERSION/go
-export GOPATH=$TMP/$PRGNAM-$VERSION/dist
-mkdir -p $PKG/$PREFIX/{bin,man/man1}
+mkdir -p $PKG/$PREFIX/{bin,man/man1,lib$LIBDIRSUFFIX}
 
 cd $TMP/$PRGNAM-$VERSION/ 
-go build -o $PKG$PREFIX/bin/lxd github.com/lxc/lxd/lxd
-go build -o $PKG$PREFIX/bin/lxc github.com/lxc/lxd/lxc
-go build -o $PKG$PREFIX/bin/fuidshift github.com/lxc/lxd/fuidshift
-go build -o $PKG$PREFIX/bin/lxd-p2c github.com/lxc/lxd/lxd-p2c
 
-cp scripts/lxc-to-lxd $PKG$PREFIX/bin
+export GOPATH=$PKG/$PREFIX
+make deps
+export CGO_CFLAGS="-I$TMP/$PRGNAM-$VERSION/vendor/raft/include/ -I$TMP/$PRGNAM-$VERSION/vendor/dqlite/include/"
+export CGO_LDFLAGS="-L$TMP/$PRGNAM-$VERSION/vendor/raft/.libs -L$TMP/$PRGNAM-$VERSION/vendor/dqlite/.libs/"
+export LD_LIBRARY_PATH="$TMP/$PRGNAM-$VERSION/vendor/raft/.libs/:$TMP/$PRGNAM-$VERSION/vendor/dqlite/.libs/"
+export CGO_LDFLAGS_ALLOW="(-Wl,-wrap,pthread_create)|(-Wl,-z,now)"
+#
+make
+# remove deps
+for i in generate deps macaroon-identity; do
+  rm  $PKG$PREFIX/bin/$i
+done
+cp -a $TMP/$PRGNAM-$VERSION/vendor/dqlite/.libs/libdqlite.so* $PKG/$PREFIX/lib$LIBDIRSUFFIX
+cp -a $TMP/$PRGNAM-$VERSION/vendor/raft/.libs/libraft.so* $PKG/$PREFIX/lib$LIBDIRSUFFIX
+
+find $PKG -print0 | xargs -0 file | grep -e "executable" -e "shared object" | grep ELF \
+  | cut -f 1 -d : | xargs strip --strip-unneeded 2> /dev/null || true
+
 # generate man-pages
-help2man $PKG$PREFIX/bin/lxd -n "The container hypervisor - daemon" --no-info --no-discard-stderr > $PKG$PREFIX/man/man1/lxd.1
-help2man $PKG$PREFIX/bin/lxc -n "The container hypervisor - client" --no-info --no-discard-stderr > $PKG$PREFIX/man/man1/lxc.1
+$PKG$PREFIX/bin/lxd manpage $PKG$PREFIX/man/man1
+$PKG$PREFIX/bin/lxc manpage $PKG$PREFIX/man/man1
 help2man $PKG$PREFIX/bin/fuidshift -n "uid/gid shifter" --no-info --no-discard-stderr > $PKG$PREFIX/man/man1/fuidshift.1
-help2man $PKG$PREFIX/bin/lxd-p2c -n "uid/gid shifter" --no-info --no-discard-stderr > $PKG$PREFIX/man/man1/lxd-p2c.1
-#help2man $PKG$PREFIX/bin/lxc-to-lxd -n "Convert LXC containers to LXD" --no-info --version-string=%{version} --no-discard-stderr > $PKG$PREFIX/man/man1/lxc-to-lxd.1
+help2man $PKG$PREFIX/bin/lxd-p2c -n "Physical to container migration tool" --no-info --no-discard-stderr > $PKG$PREFIX/man/man1/lxd-p2c.1
+help2man $PKG$PREFIX/bin/lxc-to-lxd -n "Convert LXC containers to LXD" --no-info --no-discard-stderr > $PKG$PREFIX/man/man1/lxc-to-lxd.1
+help2man $PKG$PREFIX/bin/lxd-benchmark -n "Benchmark performance of LXD" --no-info --no-discard-stderr > $PKG$PREFIX/man/man1/lxd-benchmark.1
+help2man $PKG$PREFIX/bin/lxd-agent -n "LXD virtual machine guest agent" --no-info --no-discard-stderr > $PKG$PREFIX/man/man1/lxd-agent.1
+help2man $PKG$PREFIX/bin/lxd-user -n "LXD user project daemon" --no-info --no-discard-stderr > $PKG$PREFIX/man/man1/lxd-user.1
+find $PKG$PREFIX/man -type f -exec gzip -9 {} \;
+for i in $( find $PKG$PREFIX/man -type l ) ; do ln -s $( readlink $i ).gz $i.gz ; rm $i ; done
 
-#go get github.com/lxc/lxd
-#cd $GOPATH/src/github.com/lxc/lxd
-#make
+# doc
+mkdir -p $PKG$PREFIX/doc/$PRGNAM-$VERSION
+cp -a \
+  AUTHORS COPYING README.md CODE_OF_CONDUCT.md SECURITY.md CONTRIBUTING.md SUPPORT.md \
+  $PKG$PREFIX/doc/$PRGNAM-$VERSION
+cat $CWD/$PRGNAM.SlackBuild > $PKG$PREFIX/doc/$PRGNAM-$VERSION/$PRGNAM.SlackBuild
 
-#chown -R root:root $TMP/$PRGNAM-$VERSION
-
-#cp -a $TMP/$PRGNAM-$VERSION/go/bin/* $PKG$PREFIX/bin
-
-mkdir -p $PKG$PREFIX/service/log
-mkdir -p $PKG/etc/profile.d
+# configs
+install -D -m0755 $CWD/etc-profile-d-lxd.sh $PKG/etc/profile.d/lxd.sh.new
+install -D -m0755 $CWD/etc-profile-d-lxd.csh $PKG/etc/profile.d/lxd.csh.new
+# extra
+install -D -m0755 $CWD/service-log-lxd-run $PKG$PREFIX/service/log/run.new
+install -D -m0755 $CWD/service-lxd-run $PKG$PREFIX/service/run.new
 
 mkdir -p $PKG/install
 cat $CWD/slack-desc > $PKG/install/slack-desc
 cat $CWD/doinst.sh > $PKG/install/doinst.sh
-cat $CWD/service-log-lxd-run > $PKG$PREFIX/service/log/run.new
-cat $CWD/service-lxd-run > $PKG$PREFIX/service/run.new
-cat $CWD/etc-profile-d-lxd.sh > $PKG/etc/profile.d/lxd.sh.new
-
-chmod 755 $PKG$PREFIX/service/log/run.new
-chmod 755 $PKG$PREFIX/service/run.new
-chmod 755 $PKG/etc/profile.d/lxd.sh.new
 
 cd $PKG
-/sbin/makepkg -l y -c n $OUTPUT/$PRGNAM-$VERSION-$ARCH-$BUILD$TAG.${PKGTYPE:-tgz}
+/sbin/makepkg -l y -c n $OUTPUT/$PRGNAM-$VERSION-$ARCH-$BUILD$TAG.$PKGTYPE
 
